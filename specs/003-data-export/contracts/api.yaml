@@ -1,0 +1,286 @@
+openapi: 3.1.0
+info:
+  title: DB Query Tool - Export API
+  version: 1.0.0
+  description: |
+    Export API for downloading query results in multiple formats (CSV, JSON, Excel).
+    
+    This API extends the existing query execution functionality with export capabilities.
+    Users can export the results of their SQL queries in CSV, JSON, or Excel (XLSX) format.
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development server
+
+paths:
+  /databases/{dbName}/export:
+    post:
+      summary: Export query results
+      description: |
+        Export query results in the specified format. The query results from a previous
+        query execution are sent in the request body along with the desired export format.
+        
+        The endpoint generates the export file on-demand and streams it to the client
+        with appropriate HTTP headers for file download.
+        
+        **Limits**: Maximum 100,000 rows per export.
+      operationId: exportQueryResults
+      tags:
+        - exports
+      parameters:
+        - name: dbName
+          in: path
+          required: true
+          description: Database name (used for filename generation)
+          schema:
+            type: string
+            example: myapp_db
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportRequest'
+            examples:
+              csvExport:
+                summary: Export as CSV
+                value:
+                  format: csv
+                  queryResults:
+                    columns: ["id", "name", "email", "createdAt"]
+                    rows:
+                      - id: 1
+                        name: Alice
+                        email: alice@example.com
+                        createdAt: "2025-01-01T10:00:00"
+                      - id: 2
+                        name: Bob
+                        email: bob@example.com
+                        createdAt: "2025-01-02T11:00:00"
+                    rowCount: 2
+                    executionTime: 45.2
+              jsonExport:
+                summary: Export as JSON
+                value:
+                  format: json
+                  queryResults:
+                    columns: ["id", "name"]
+                    rows:
+                      - id: 1
+                        name: Alice
+                      - id: 2
+                        name: Bob
+                    rowCount: 2
+                    executionTime: 30.1
+              excelExport:
+                summary: Export as Excel
+                value:
+                  format: excel
+                  queryResults:
+                    columns: ["id", "name", "createdAt"]
+                    rows:
+                      - id: 1
+                        name: Alice
+                        createdAt: "2025-01-01T10:00:00"
+                    rowCount: 1
+                    executionTime: 25.5
+      responses:
+        '200':
+          description: Export file generated successfully
+          headers:
+            Content-Disposition:
+              description: Attachment filename
+              schema:
+                type: string
+                example: attachment; filename=myapp_db_2025-12-27_143022.csv
+            Content-Type:
+              description: MIME type of the export file
+              schema:
+                type: string
+                enum:
+                  - text/csv; charset=utf-8
+                  - application/json; charset=utf-8
+                  - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+                description: CSV file with UTF-8 encoding
+              example: |
+                id,name,email,createdAt
+                1,Alice,alice@example.com,2025-01-01T10:00:00
+                2,Bob,bob@example.com,2025-01-02T11:00:00
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+              example:
+                - id: 1
+                  name: Alice
+                  email: alice@example.com
+                  createdAt: "2025-01-01T10:00:00"
+                - id: 2
+                  name: Bob
+                  email: bob@example.com
+                  createdAt: "2025-01-02T11:00:00"
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+                description: Excel XLSX file
+        '400':
+          description: Invalid request (invalid format or too many rows)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidFormat:
+                  summary: Invalid export format
+                  value:
+                    error:
+                      code: INVALID_FORMAT
+                      message: "Invalid export format 'pdf'. Supported formats: csv, json, excel"
+                      details:
+                        providedFormat: pdf
+                        supportedFormats: [csv, json, excel]
+                tooManyRows:
+                  summary: Export too large
+                  value:
+                    error:
+                      code: EXPORT_TOO_LARGE
+                      message: "Export limited to 100,000 rows. Your query returned 250,000 rows. Please add a LIMIT clause to your query."
+                      details:
+                        maxRows: 100000
+                        actualRows: 250000
+        '404':
+          description: Database not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: "Database connection 'unknown_db' not found"
+        '500':
+          description: Export generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  code: EXPORT_GENERATION_FAILED
+                  message: "Failed to generate export file. Please try again."
+                  details:
+                    format: excel
+                    errorType: MemoryError
+
+components:
+  schemas:
+    ExportFormat:
+      type: string
+      enum:
+        - csv
+        - json
+        - excel
+      description: |
+        Export file format:
+        - `csv`: Comma-separated values (UTF-8 encoding)
+        - `json`: JSON array of objects
+        - `excel`: Excel XLSX format
+      example: csv
+
+    ExportRequest:
+      type: object
+      required:
+        - format
+        - queryResults
+      properties:
+        format:
+          $ref: '#/components/schemas/ExportFormat'
+        queryResults:
+          $ref: '#/components/schemas/QueryResult'
+      description: Request to export query results in specified format
+
+    QueryResult:
+      type: object
+      required:
+        - columns
+        - rows
+        - rowCount
+        - executionTime
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+          description: Column names from the query
+          example: ["id", "name", "email", "createdAt"]
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: Query result rows as array of objects
+          example:
+            - id: 1
+              name: Alice
+              email: alice@example.com
+              createdAt: "2025-01-01T10:00:00"
+            - id: 2
+              name: Bob
+              email: bob@example.com
+              createdAt: "2025-01-02T11:00:00"
+        rowCount:
+          type: integer
+          description: Number of rows returned
+          example: 2
+        executionTime:
+          type: number
+          format: float
+          description: Query execution time in milliseconds
+          example: 45.2
+      description: Query execution result (from previous query execution)
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Error code for programmatic handling
+              enum:
+                - INVALID_FORMAT
+                - EXPORT_TOO_LARGE
+                - EXPORT_GENERATION_FAILED
+                - NOT_FOUND
+                - INTERNAL_ERROR
+              example: EXPORT_TOO_LARGE
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Export limited to 100,000 rows. Your query returned 250,000 rows. Please add a LIMIT clause to your query."
+            details:
+              type: object
+              additionalProperties: true
+              description: Additional error context (optional)
+              example:
+                maxRows: 100000
+                actualRows: 250000
+      description: Error response structure
+
+tags:
+  - name: exports
+    description: Query result export operations

@@ -1,0 +1,527 @@
+openapi: 3.0.3
+info:
+  title: Database Query Tool API
+  description: REST API for PostgreSQL database connection management, schema browsing, and query execution
+  version: 1.0.0
+  contact:
+    name: Database Query Tool
+    
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local development server
+
+tags:
+  - name: databases
+    description: Database connection management
+  - name: metadata
+    description: Database schema metadata
+  - name: queries
+    description: SQL query execution
+
+paths:
+  /databases/:
+    get:
+      summary: List all database connections
+      description: Retrieve all stored database connections
+      operationId: listDatabases
+      tags:
+        - databases
+      responses:
+        '200':
+          description: List of database connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatabaseConnection'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    post:
+      summary: Create a new database connection
+      description: Add a new PostgreSQL database connection
+      operationId: createDatabase
+      tags:
+        - databases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatabaseConnectionCreate'
+      responses:
+        '201':
+          description: Database connection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseConnection'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  
+  /databases/{db_name}/:
+    put:
+      summary: Update database connection
+      description: Update the connection URL for an existing database
+      operationId: updateDatabase
+      tags:
+        - databases
+      parameters:
+        - name: db_name
+          in: path
+          required: true
+          description: Database name (unique identifier)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatabaseConnectionCreate'
+      responses:
+        '200':
+          description: Database connection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseConnection'
+        '404':
+          description: Database not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    delete:
+      summary: Delete database connection
+      description: Remove a database connection and its cached metadata
+      operationId: deleteDatabase
+      tags:
+        - databases
+      parameters:
+        - name: db_name
+          in: path
+          required: true
+          description: Database name (unique identifier)
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Database connection deleted
+        '404':
+          description: Database not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  
+  /databases/{db_name}/metadata/:
+    get:
+      summary: Get database metadata
+      description: Retrieve cached schema metadata (tables, views, columns) for a database. Extracts from PostgreSQL if not cached.
+      operationId: getDatabaseMetadata
+      tags:
+        - metadata
+      parameters:
+        - name: db_name
+          in: path
+          required: true
+          description: Database name (unique identifier)
+          schema:
+            type: string
+        - name: refresh
+          in: query
+          required: false
+          description: Force metadata refresh from PostgreSQL
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Database metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseMetadata'
+        '404':
+          description: Database not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Connection error or extraction failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  
+  /databases/{db_name}/query/:
+    post:
+      summary: Execute SQL query
+      description: Validate and execute a SELECT query against the database. Automatically adds LIMIT 1000 if not present.
+      operationId: executeQuery
+      tags:
+        - queries
+      parameters:
+        - name: db_name
+          in: path
+          required: true
+          description: Database name (unique identifier)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRequest'
+      responses:
+        '200':
+          description: Query executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResult'
+        '400':
+          description: Validation error (invalid SQL, non-SELECT statement)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Database not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Query execution error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  
+  /databases/{db_name}/nl-query/:
+    post:
+      summary: Convert natural language to SQL
+      description: Use LLM to generate SQL query from natural language description. Returns generated SQL for user review.
+      operationId: naturalLanguageQuery
+      tags:
+        - queries
+      parameters:
+        - name: db_name
+          in: path
+          required: true
+          description: Database name (unique identifier)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NaturalLanguageQueryRequest'
+      responses:
+        '200':
+          description: SQL generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NaturalLanguageQueryResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Database not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: LLM API error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    DatabaseConnectionCreate:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          description: PostgreSQL connection URL
+          example: postgresql://user:password@localhost:5432/mydb
+          pattern: '^postgresql://.+'
+    
+    DatabaseConnection:
+      type: object
+      required:
+        - id
+        - name
+        - url
+        - createdAt
+      properties:
+        id:
+          type: integer
+          description: Unique database connection ID
+          example: 1
+        name:
+          type: string
+          description: Database name (extracted from URL or user-provided)
+          example: mydb
+        url:
+          type: string
+          description: PostgreSQL connection URL
+          example: postgresql://user:password@localhost:5432/mydb
+        createdAt:
+          type: string
+          format: date-time
+          description: Connection creation timestamp (ISO 8601)
+          example: '2025-12-16T12:00:00Z'
+        lastConnectedAt:
+          type: string
+          format: date-time
+          description: Last successful connection timestamp (ISO 8601)
+          example: '2025-12-16T14:30:00Z'
+          nullable: true
+    
+    DatabaseMetadata:
+      type: object
+      required:
+        - id
+        - databaseId
+        - tables
+        - extractedAt
+      properties:
+        id:
+          type: integer
+          description: Metadata record ID
+          example: 1
+        databaseId:
+          type: integer
+          description: Associated database connection ID
+          example: 1
+        tables:
+          type: array
+          description: Array of table/view metadata
+          items:
+            $ref: '#/components/schemas/TableMetadata'
+        extractedAt:
+          type: string
+          format: date-time
+          description: Metadata extraction timestamp (ISO 8601)
+          example: '2025-12-16T12:05:00Z'
+    
+    TableMetadata:
+      type: object
+      required:
+        - schemaName
+        - tableName
+        - tableType
+        - columns
+      properties:
+        schemaName:
+          type: string
+          description: PostgreSQL schema name
+          example: public
+        tableName:
+          type: string
+          description: Table or view name
+          example: users
+        tableType:
+          type: string
+          enum: [TABLE, VIEW]
+          description: Table type
+          example: TABLE
+        columns:
+          type: array
+          description: Array of column metadata
+          items:
+            $ref: '#/components/schemas/ColumnMetadata'
+    
+    ColumnMetadata:
+      type: object
+      required:
+        - columnName
+        - dataType
+        - isNullable
+        - ordinalPosition
+      properties:
+        columnName:
+          type: string
+          description: Column name
+          example: userId
+        dataType:
+          type: string
+          description: PostgreSQL data type
+          example: integer
+        isNullable:
+          type: boolean
+          description: Whether column accepts NULL values
+          example: false
+        columnDefault:
+          type: string
+          description: Default value expression
+          example: nextval('users_id_seq')
+          nullable: true
+        ordinalPosition:
+          type: integer
+          description: Column position in table (1-based)
+          example: 1
+    
+    QueryRequest:
+      type: object
+      required:
+        - sql
+      properties:
+        sql:
+          type: string
+          description: SQL SELECT statement
+          example: SELECT * FROM users WHERE created_at > '2025-01-01'
+          minLength: 1
+    
+    QueryResult:
+      type: object
+      required:
+        - columns
+        - rows
+        - rowCount
+        - executionTimeMs
+      properties:
+        columns:
+          type: array
+          description: Column definitions
+          items:
+            $ref: '#/components/schemas/ColumnDefinition'
+        rows:
+          type: array
+          description: Query result rows (camelCase keys)
+          items:
+            type: object
+            additionalProperties: true
+            example:
+              userId: 1
+              userName: Alice
+              createdAt: '2025-01-01T12:00:00Z'
+        rowCount:
+          type: integer
+          description: Number of rows returned
+          example: 42
+        executionTimeMs:
+          type: integer
+          description: Query execution time in milliseconds
+          example: 125
+    
+    ColumnDefinition:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+          description: Column name (camelCase)
+          example: userId
+        type:
+          type: string
+          description: Data type
+          example: integer
+    
+    NaturalLanguageQueryRequest:
+      type: object
+      required:
+        - nlQuery
+      properties:
+        nlQuery:
+          type: string
+          description: Natural language query description
+          example: Show me all users created in the last week
+          minLength: 1
+    
+    NaturalLanguageQueryResponse:
+      type: object
+      required:
+        - generatedSql
+      properties:
+        generatedSql:
+          type: string
+          description: LLM-generated SQL query
+          example: SELECT * FROM users WHERE created_at > NOW() - INTERVAL '7 days' LIMIT 1000
+        confidence:
+          type: number
+          format: float
+          description: LLM confidence score (0-1, optional)
+          example: 0.95
+          nullable: true
+    
+    ErrorResponse:
+      type: object
+      required:
+        - message
+        - code
+      properties:
+        message:
+          type: string
+          description: Human-readable error message
+          example: Only SELECT statements are allowed
+        code:
+          type: string
+          description: Error code
+          enum:
+            - VALIDATION_ERROR
+            - SQL_VALIDATION_ERROR
+            - CONNECTION_ERROR
+            - NOT_FOUND
+            - INTERNAL_ERROR
+          example: SQL_VALIDATION_ERROR
+        details:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+          example:
+            statementType: UPDATE
+            line: 1
+            column: 1
+          nullable: true

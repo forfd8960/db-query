@@ -1,0 +1,229 @@
+### Database Query Tool - REST API Tests
+### 使用 VS Code REST Client 扩展测试
+
+@baseUrl = http://127.0.0.1:8000
+@apiUrl = {{baseUrl}}/api/v1
+
+###############################################################################
+# 基础端点
+###############################################################################
+
+### 根端点 - 获取 API 信息
+GET {{baseUrl}}/
+
+### 健康检查
+GET {{baseUrl}}/health
+
+### API v1 健康检查
+GET {{apiUrl}}/health
+
+###############################################################################
+# 数据库连接管理 (User Story 1)
+###############################################################################
+
+### 创建数据库连接
+# @name createDatabase
+POST {{apiUrl}}/databases/
+Content-Type: application/json
+
+{
+  "name": "test_db",
+  "url": "postgres://postgres:postgres@localhost:5432/test_db"
+}
+
+### 获取所有数据库连接
+GET {{apiUrl}}/databases/
+
+### 更新数据库连接
+PUT {{apiUrl}}/databases/test_db/
+Content-Type: application/json
+
+{
+  "url": "postgresql://user:newpassword@localhost:5432/testdb"
+}
+
+### 获取数据库元数据
+GET {{apiUrl}}/databases/test_db/metadata/
+
+### 删除数据库连接
+DELETE {{apiUrl}}/databases/test_db/
+
+###############################################################################
+# SQL 查询执行 (User Story 2)
+###############################################################################
+
+### 执行 SELECT 查询
+POST {{apiUrl}}/databases/test_db/query/
+Content-Type: application/json
+
+{
+  "sql": "SELECT * FROM users LIMIT 10;"
+}
+
+### 执行带参数的查询
+POST {{apiUrl}}/databases/test_db/query/
+Content-Type: application/json
+
+{
+  "sql": "SELECT * FROM users WHERE age > 18 LIMIT 5;"
+}
+
+### 测试无效 SQL (应该返回错误)
+POST {{apiUrl}}/databases/test_db/query/
+Content-Type: application/json
+
+{
+  "sql": "INVALID SQL QUERY"
+}
+
+### 测试非 SELECT 查询 (应该被拒绝)
+POST {{apiUrl}}/databases/test_db/query/
+Content-Type: application/json
+
+{
+  "sql": "DELETE FROM users WHERE id = 1;"
+}
+
+###############################################################################
+# 自然语言转 SQL (User Story 3)
+###############################################################################
+
+### 生成 SQL 查询
+POST {{apiUrl}}/databases/test_db/nl-query/
+Content-Type: application/json
+
+{
+  "prompt": "Show me all users who registered in the last 7 days"
+}
+
+### 自然语言查询示例 2
+POST {{apiUrl}}/databases/test_db/nl-query/
+Content-Type: application/json
+
+{
+  "prompt": "Count total number of orders grouped by status"
+}
+
+### 自然语言查询示例 3
+POST {{apiUrl}}/databases/test_db/generate-sql/
+Content-Type: application/json
+
+{
+  "prompt": "Find top 10 customers by total purchase amount"
+}
+
+###############################################################################
+# 错误处理测试
+###############################################################################
+
+### 访问不存在的数据库
+GET {{apiUrl}}/databases/nonexistent_db/metadata/
+
+### 空请求体
+POST {{apiUrl}}/databases/
+Content-Type: application/json
+
+{}
+
+### 无效的 JSON
+POST {{apiUrl}}/databases/
+Content-Type: application/json
+
+{
+  "name": "test_db"
+  "url": "invalid"
+}
+
+###############################################################################
+# 实际使用流程示例
+###############################################################################
+
+### 步骤 1: 创建数据库连接
+# @name step1
+POST {{apiUrl}}/databases/
+Content-Type: application/json
+
+{
+  "name": "production_db",
+  "url": "postgresql://admin:secret@db.example.com:5432/production"
+}
+
+### 步骤 2: 获取数据库元数据
+GET {{apiUrl}}/databases/production_db/metadata/
+
+### 步骤 3: 执行查询
+POST {{apiUrl}}/databases/production_db/query/
+Content-Type: application/json
+
+{
+  "sql": "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
+}
+
+### 步骤 4: 使用自然语言生成查询
+POST {{apiUrl}}/databases/production_db/generate-sql/
+Content-Type: application/json
+
+{
+  "prompt": "Show me the schema of the users table"
+}
+
+### 步骤 5: 清理 - 删除连接
+DELETE {{apiUrl}}/databases/production_db/
+
+###############################################################################
+# 性能测试
+###############################################################################
+
+### 大数据量查询
+POST {{apiUrl}}/databases/test_db/query/
+Content-Type: application/json
+
+{
+  "sql": "SELECT * FROM large_table LIMIT 1000;"
+}
+
+### 复杂查询
+POST {{apiUrl}}/databases/test_db/query/
+Content-Type: application/json
+
+{
+  "sql": "SELECT u.name, COUNT(o.id) as order_count FROM users u LEFT JOIN orders o ON u.id = o.user_id GROUP BY u.id, u.name ORDER BY order_count DESC LIMIT 20;"
+}
+
+###############################################################################
+# 边界情况测试
+###############################################################################
+
+### 超长数据库名称
+POST {{apiUrl}}/databases/
+Content-Type: application/json
+
+{
+  "name": "this_is_a_very_long_database_name_that_might_exceed_limits_in_some_systems",
+  "url": "postgresql://user:pass@localhost:5432/db"
+}
+
+### 特殊字符在数据库名称中
+POST {{apiUrl}}/databases/
+Content-Type: application/json
+
+{
+  "name": "test-db-2024",
+  "url": "postgresql://user:pass@localhost:5432/db"
+}
+
+### 空 SQL 查询
+POST {{apiUrl}}/databases/test_db/query/
+Content-Type: application/json
+
+{
+  "sql": ""
+}
+
+### 仅空格的 SQL
+POST {{apiUrl}}/databases/test_db/query/
+Content-Type: application/json
+
+{
+  "sql": "   "
+}
